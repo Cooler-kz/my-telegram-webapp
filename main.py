@@ -194,6 +194,23 @@ async def telegram_webhook(event: dict, db: AsyncSession = Depends(get_db)):
     if pre_checkout:
         query_id = pre_checkout.get("id")
         payload = pre_checkout.get("payload", "")
+
+        # Отправляем ответ на pre_checkout_query через Telegram Bot API
+        if not BOT_TOKEN:
+            raise HTTPException(status_code=500, detail="BOT_TOKEN not configured")
+
+        async with AsyncClient() as client:
+            resp = await client.post(
+                f"https://api.telegram.org/bot{BOT_TOKEN}/answerPreCheckoutQuery",
+                json={
+                    "pre_checkout_query_id": query_id,
+                    "ok": True,
+                },
+            )
+            result = resp.json()
+            if not result.get("ok"):
+                raise HTTPException(status_code=500, detail="Telegram answerPreCheckoutQuery API error")
+
         return {"ok": True, "pre_checkout_query_id": query_id, "payload": payload}
 
     if successful:
