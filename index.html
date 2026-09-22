@@ -363,6 +363,7 @@
                 if (!backendAvailable) {
                     backendAvailable = true;
                     offlineIndicator.style.display = 'none';
+                    statusEl.textContent = 'Работает нормально';
                 }
             } catch (error) {
                 console.error('Ошибка при загрузке статистики:', error);
