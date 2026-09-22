@@ -17,6 +17,7 @@ class User(Base):
     telegram_id = Column(BigInteger, unique=True, index=True, nullable=False)
     username = Column(String(255), nullable=True)
     click_count = Column(Integer, default=0)
+    purchases = Column(String, default="")
 
 
 class GlobalStats(Base):

@@ -1,11 +1,13 @@
 import hashlib
 import hmac
+import os
 import secrets
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Depends
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
+from httpx import AsyncClient
 from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,7 +16,7 @@ from database import get_db, init_db, User, GlobalStats, apply_boost
 
 app = FastAPI(title="Telegram Clicker API")
 
-BOT_TOKEN = secrets.token_urlsafe(32)  # Замените на токен вашего бота
+BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 ALLOWED_ORIGINS = ["https://github.com", "https://<username>.github.io", "https://abc123.ngrok.io"]
 
 app.add_middleware(
@@ -126,18 +128,80 @@ async def click(req: ClickRequest, db: AsyncSession = Depends(get_db)):
 @app.post("/api/create-stars-invoice")
 async def create_stars_invoice(req: StarsInvoiceRequest):
     """Создание инвойса для Telegram Stars"""
-    # TODO: Реализовать создание инвойса через Telegram Bot API
-    # Пример: POST https://api.telegram.org/bot<BOT_TOKEN>/createInvoiceLink
-    # with: currency="XTR", provider_data=None (для Stars)
-    raise HTTPException(status_code=501, detail="Telegram Stars invoice creation not implemented yet")
+    if not BOT_TOKEN:
+        raise HTTPException(status_code=500, detail="BOT_TOKEN not configured")
+
+    prices = []
+    if req.booster_type == "x2":
+        prices = [{"label": "Бустер X2", "amount": 50}]
+    elif req.booster_type == "x3":
+        prices = [{"label": "Бустер X3", "amount": 100}]
+    elif req.booster_type == "x5":
+        prices = [{"label": "Бустер X5", "amount": 200}]
+    else:
+        raise HTTPException(status_code=400, detail="Invalid booster type")
+
+    payload = f"boost_{req.booster_type}_{req.user_id}"
+
+    async with AsyncClient() as client:
+        resp = await client.post(
+            f"https://api.telegram.org/bot{BOT_TOKEN}/createInvoiceLink",
+            json={
+                "title": "Ускоритель X2",
+                "description": "Удваивает количество очков за каждый клик!",
+                "payload": payload,
+                "provider_token": "",
+                "currency": "XTR",
+                "prices": prices,
+            },
+        )
+        result = resp.json()
+        if not result.get("ok"):
+            raise HTTPException(status_code=500, detail="Telegram API error")
+        return {"success": True, "invoice_url": result["result"]}
 
 
 @app.get("/api/check-payment-status/{invoice_short_id}")
 async def check_payment_status(invoice_short_id: str):
     """Проверка статуса оплаты и зачисление буста"""
-    # TODO: Реализовать проверку статуса через Telegram Bot API
-    # Пример: GET https://api.telegram.org/bot<BOT_TOKEN>/getInvoiceLink
     raise HTTPException(status_code=501, detail="Payment status check not implemented yet")
+
+
+@app.post("/api/telegram-webhook")
+async def telegram_webhook(event: dict, db: AsyncSession = Depends(get_db)):
+    """Обработка вебхука Telegram для pre_checkout_query и successful_payment"""
+    update_type = event.get("update_id")
+    if update_type is None:
+        raise HTTPException(status_code=400, detail="Invalid update")
+
+    message = event.get("message", {})
+    pre_checkout = message.get("pre_checkout_query")
+    successful = message.get("successful_payment")
+
+    if pre_checkout:
+        query_id = pre_checkout.get("id")
+        payload = pre_checkout.get("payload", "")
+        return {"ok": True, "pre_checkout_query_id": query_id, "payload": payload}
+
+    if successful:
+        payload = successful.get("payload", "")
+        telegram_id = successful.get("from", {}).get("id")
+        invoice_id = successful.get("invoice_id")
+
+        user = await db.query(User).filter(User.telegram_id == telegram_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        parts = payload.split("_")
+        if len(parts) >= 2:
+            booster_type = parts[1]
+            await db.query(User).filter(User.telegram_id == telegram_id).update({
+                User.purchases: User.purchases.cast(String) + f"{booster_type},"
+            })
+            await db.commit()
+        return {"ok": True, "user_id": telegram_id, "booster_type": booster_type}
+
+    raise HTTPException(status_code=400, detail="Unsupported update type")
 
 
 @app.post("/api/apply-boost")
