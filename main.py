@@ -6,7 +6,7 @@ import secrets
 from datetime import datetime, timedelta
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy.future import select
@@ -98,16 +98,18 @@ async def startup():
     await init_db()
 
 
-@app.post("/api/click", response_model=ClickResponse)
-async def click(payload: Optional[ClickRequest] = None, db: AsyncSession = Depends(get_db)):
-    """Построитка и валидация пользователя через Telegram initData"""
-    # Безопасное извлечение количества кликов
+@app.post("/api/click")
+async def click(request: Request, db: AsyncSession = Depends(get_db)):
+    """Парсинг сырого запроса для предотвращения ошибок 400"""
     added_clicks = 1
-    if payload:
-        added_clicks = payload.clicks or payload.count or 1
-    
-    # Мягкая валидация - разрешаем тестирование без initData
-    init_data = payload.init_data or payload.initData if payload else None
+    init_data = None
+    try:
+        body = await request.json()
+        if isinstance(body, dict):
+            added_clicks = body.get("clicks") or body.get("count") or 1
+            init_data = body.get("init_data") or body.get("initData")
+    except Exception:
+        pass  # Если пришел пустой body или не-JSON, просто засчитываем +1 клик
     if init_data and BOT_TOKEN:
         validated = validate_telegram_init_data(init_data, BOT_TOKEN)
         if not validated:
