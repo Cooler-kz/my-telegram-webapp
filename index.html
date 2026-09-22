@@ -361,16 +361,13 @@
                     document.getElementById('user-clicks').innerText = data.user_clicks;
                     document.getElementById('global-clicks').innerText = data.global_clicks;
                 }
-            } catch (error) {
-                console.error('Ошибка при загрузке статистики:', error);
-            } finally {
-                // Скрываем обе надписи оффлайна
-                const offlineMsg = document.getElementById('offlineIndicator');
-                if (offlineMsg) offlineMsg.style.display = 'none';
-
-                document.querySelectorAll('.backend-status, #backend-status').forEach(el => {
-                    el.style.display = 'none';
-                });
+            } catch (err) {
+                console.error("Network/Fetch error:", err);
+                // Скрываем офлайн-индикаторы в любом случае для теста UI
+                const offlineInd = document.getElementById('offlineIndicator');
+                if (offlineInd) offlineInd.style.display = 'none';
+                const backendStatus = document.querySelector('.backend-status');
+                if (backendStatus) backendStatus.style.display = 'none';
             }
         }
         async function buyBoost(boosterType) {
