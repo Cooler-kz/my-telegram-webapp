@@ -21,6 +21,7 @@ from database import get_db, init_db, User, GlobalStats
 app = FastAPI(title="Telegram Clicker API")
 
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
+VALIDATE_TELEGRAM_INIT_DATA = os.getenv("VALIDATE_TELEGRAM_INIT_DATA", "true").lower() == "true"
 
 app.add_middleware(
     CORSMiddleware,
@@ -110,10 +111,13 @@ async def click(request: Request, db: AsyncSession = Depends(get_db)):
             init_data = body.get("init_data") or body.get("initData")
     except Exception:
         pass  # Если пришел пустой body или не-JSON, просто засчитываем +1 клик
-    if init_data and BOT_TOKEN:
+    if init_data and BOT_TOKEN and VALIDATE_TELEGRAM_INIT_DATA:
         validated = validate_telegram_init_data(init_data, BOT_TOKEN)
         if not validated:
             raise HTTPException(status_code=401, detail="Invalid Telegram initData")
+    elif init_data and BOT_TOKEN and not VALIDATE_TELEGRAM_INIT_DATA:
+        # Валидация отключена для тестирования — принимаем произвольный init_data
+        validated = {"user": {"id": 123456789}}  # тестовый user_id
     else:
         validated = {}
 
