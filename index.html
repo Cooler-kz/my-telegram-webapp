@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Telegram Clicker</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://adsgram.ai/js/adv_engine.js"></script>
     <style>
         * {
             margin: 0;
@@ -221,6 +222,11 @@
                 <span class="price">200 ⭐️</span>
             </button>
         </div>
+        <div class="stars-buy-section" style="margin-top: 10px;">
+            <button class="stars-btn" id="adRewardBtn" onclick="showRewardAd()">
+                <span>📺 Смотреть рекламу (+100 очков)</span>
+            </button>
+        </div>
         <div class="offline-indicator" id="offlineIndicator" style="display: none;">⚠️ Работа офлайн</div>
     </div>
 
@@ -415,35 +421,72 @@
             });
         }
 
+        async function showRewardAd() {
+            const userId = tg.initDataUnsafe?.user?.id;
+            if (!userId) {
+                alert('Ошибка: не удалось определить пользователя');
+                return;
+            }
+
+            const AdController = window.Adsgram.init({ blockId: "YOUR_BLOCK_ID" });
+            
+            try {
+                const result = await AdController.showAd();
+                if (result.done === true) {
+                    if (tg.HapticFeedback) {
+                        tg.HapticFeedback.notificationOccurred('success');
+                    }
+
+                    const response = await fetch(`${API_URL}/api/claim-ad-reward`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ user_id: userId })
+                    });
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        statusEl.textContent = `Получено +100 очков! Новый баланс: ${data.balance}`;
+                        userScoreEl.textContent = data.balance;
+                        localClicks = data.balance;
+                        scoreEl.textContent = data.balance;
+                    } else {
+                        alert('Ошибка при начислении вознаграждения');
+                    }
+                }
+            } catch (error) {
+                console.error('Ошибка показа рекламы:', error);
+                alert('Не удалось показать рекламу');
+            }
+        }
+
         async function updateBoostTimer() {
             const boostTimer = document.getElementById('boostTimer');
             const boostMultiplier = document.getElementById('boostMultiplier');
             const boostExpires = document.getElementById('boostExpires');
-
+        
             try {
-                // Проверяем буст через /click endpoint
-                const response = await fetch(`${API_URL}/api/click`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ init_data: tg.initData })
-                });
+                const userId = tg.initDataUnsafe?.user?.id;
+                if (!userId) {
+                    boostTimer.style.display = 'none';
+                    return;
+                }
+        
+                const response = await fetch(`${API_URL}/api/boost-status?user_id=${userId}`);
                 if (response.ok) {
                     const data = await response.json();
-                    // Получаем статус буста из бэкенда
-                    const userResponse = await fetch(`${API_URL}/api/click`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ init_data: tg.initData })
-                    });
-                    if (userResponse.ok) {
+                    if (data.boost_active) {
                         boostTimer.style.display = 'block';
-                        boostMultiplier.textContent = 'x2';
-                        const expires = new Date(Date.now() + 15 * 60 * 1000);
-                        boostExpires.textContent = expires.toLocaleTimeString();
+                        boostMultiplier.textContent = `x${data.multiplier}`;
+                        boostExpires.textContent = data.expires_at ? new Date(data.expires_at).toLocaleTimeString() : '-';
+                    } else {
+                        boostTimer.style.display = 'none';
                     }
+                } else {
+                    boostTimer.style.display = 'none';
                 }
             } catch (error) {
                 console.error('Ошибка обновления таймера буста:', error);
+                boostTimer.style.display = 'none';
             }
         }
 

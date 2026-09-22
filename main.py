@@ -252,3 +252,37 @@ async def stats(db: AsyncSession = Depends(get_db)):
     global_clicks = global_stat.total_clicks if global_stat else 0
 
     return StatsResponse(user_clicks=user_clicks, global_clicks=global_clicks)
+
+
+@app.get("/api/boost-status")
+async def get_boost_status(user_id: int, db: AsyncSession = Depends(get_db)):
+    """Получение статуса активного буста пользователя"""
+    user = await db.query(User).filter(User.telegram_id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    boost_active = False
+    multiplier = 1.0
+    expires_at = None
+    
+    if user.boost_expires_at and user.boost_expires_at > datetime.utcnow():
+        boost_active = True
+        multiplier = user.boost_multiplier
+        expires_at = user.boost_expires_at.isoformat()
+    
+    return {"boost_active": boost_active, "multiplier": multiplier, "expires_at": expires_at}
+
+
+@app.post("/api/claim-ad-reward")
+async def claim_ad_reward(user_id: int, db: AsyncSession = Depends(get_db)):
+    """Начисление вознаграждения за просмотр рекламы (+100 очков)"""
+    user = await db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Начисляем 100 очков
+    user.click_count += 100
+    await db.commit()
+    await db.refresh(user)
+    
+    return {"success": True, "balance": user.click_count}
