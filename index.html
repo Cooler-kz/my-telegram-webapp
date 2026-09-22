@@ -357,12 +357,14 @@
                 }
                 const data = await response.json();
                 if (data && typeof data.user_clicks !== 'undefined') {
-                    globalScoreEl.textContent = data.global_clicks ?? 0;
-                    userScoreEl.textContent = data.user_clicks;
-                    localClicks = data.user_clicks;
-                    scoreEl.textContent = localClicks;
-                    offlineIndicator.style.display = 'none';
-                    statusEl.textContent = 'Работает нормально';
+                    document.getElementById('user-clicks').innerText = data.user_clicks;
+                    document.getElementById('global-clicks').innerText = data.global_clicks;
+                    
+                    const offlineInd = document.getElementById('offlineIndicator');
+                    if (offlineInd) offlineInd.style.display = 'none';
+                    
+                    const backendStatus = document.querySelector('.backend-status');
+                    if (backendStatus) backendStatus.style.display = 'none';
                 }
             } catch (error) {
                 console.error('Ошибка при загрузке статистики:', error);
