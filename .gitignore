@@ -1,0 +1,23 @@
+# Database
+*.db
+
+# Environment & Configs
+*.env
+*.json
+
+# Python
+__pycache__/
+*.py[cod]
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+
+# Drafts & Local docs
+*.md
+!/README.md
+
+# Hidden rules & configs
+.*
+!/.gitignore

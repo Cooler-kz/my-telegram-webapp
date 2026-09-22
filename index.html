@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Telegram Clicker</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--tg-theme-bg-color, #1c1c1e);
+            color: var(--tg-theme-text-color, #ffffff);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        .clicker-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            position: relative;
+        }
+        h1 {
+            font-size: 1.5rem;
+            margin-bottom: 10px;
+            text-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        }
+        .score-display {
+            font-size: 3rem;
+            font-weight: bold;
+            margin: 10px 0;
+            color: var(--tg-theme-button-color, #007aff);
+            text-shadow: 0 0 20px rgba(0, 122, 255, 0.5);
+        }
+        .rat-svg {
+            width: 220px;
+            height: 220px;
+            cursor: pointer;
+            transition: transform 0.05s ease;
+            position: relative;
+            z-index: 10;
+            -webkit-tap-highlight-color: transparent;
+            filter: drop-shadow(0 8px 25px rgba(0,0,0,0.4));
+        }
+        .rat-svg.clicked {
+            animation: leshch-hit 0.2s ease-out;
+        }
+        @keyframes leshch-hit {
+            0% { transform: scale(1) rotate(0deg); }
+            20% { transform: scale(1.15) rotate(-8deg); }
+            40% { transform: scale(0.9) rotate(6deg); }
+            60% { transform: scale(1.05) rotate(-4deg); }
+            80% { transform: scale(0.95) rotate(2deg); }
+            100% { transform: scale(1) rotate(0deg); }
+        }
+        .splash {
+            position: absolute;
+            pointer-events: none;
+            z-index: 5;
+        }
+        .splash-drop {
+            position: absolute;
+            width: 8px;
+            height: 8px;
+            background: radial-gradient(circle, rgba(255,255,255,0.9) 0%, rgba(200,200,255,0.6) 70%, transparent 100%);
+            border-radius: 50%;
+            animation: splash-fly 0.6s ease-out forwards;
+        }
+        @keyframes splash-fly {
+            0% { opacity: 1; transform: scale(1); }
+            100% { opacity: 0; transform: translate(var(--tx), var(--ty)) scale(0); }
+        }
+        .splash-star {
+            position: absolute;
+            font-size: 20px;
+            animation: star-fly 0.5s ease-out forwards;
+        }
+        @keyframes star-fly {
+            0% { opacity: 1; transform: scale(0) rotate(0deg); }
+            50% { transform: scale(1.3) rotate(180deg); }
+            100% { opacity: 0; transform: translate(var(--tx), var(--ty)) scale(0) rotate(360deg); }
+        }
+        .float-text {
+            position: absolute;
+            font-weight: bold;
+            font-size: 1.5rem;
+            pointer-events: none;
+            z-index: 20;
+            animation: float-up 0.8s ease-out forwards;
+            text-shadow: 0 2px 8px rgba(0,0,0,0.5);
+        }
+        @keyframes float-up {
+            0% { opacity: 1; transform: translateY(0) scale(1); }
+            100% { opacity: 0; transform: translateY(-80px) scale(1.2); }
+        }
+        .stats {
+            margin-top: 20px;
+            font-size: 0.95rem;
+            color: var(--tg-theme-hint-color, #8e8e93);
+            text-align: center;
+        }
+        .stats p {
+            margin: 5px 0;
+        }
+        .status {
+            margin-top: 10px;
+            font-size: 0.85rem;
+            color: var(--tg-theme-button-color, #007aff);
+        }
+        .offline-indicator {
+            color: #ff6b6b;
+            font-size: 0.8rem;
+            margin-top: 5px;
+        }
+        @media (max-width: 350px) {
+            .rat-image { width: 180px; height: 180px; }
+            h1 { font-size: 1.2rem; }
+        }
+    </style>
+</head>
+<body>
+    <div class="clicker-container" id="container">
+        <h1>🎯 Telegram Clicker</h1>
+        <div class="score-display" id="score">0</div>
+        <svg class="rat-svg" id="ratBtn" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+            <!-- Уши -->
+            <ellipse cx="50" cy="50" rx="25" ry="30" fill="#666" transform="rotate(-30 50 50)"/>
+            <ellipse cx="150" cy="50" rx="25" ry="30" fill="#666" transform="rotate(30 150 50)"/>
+            <ellipse cx="50" cy="50" rx="20" ry="25" fill="#888" transform="rotate(-30 50 50)"/>
+            <ellipse cx="150" cy="50" rx="20" ry="25" fill="#888" transform="rotate(30 150 50)"/>
+            <!-- Тело -->
+            <ellipse cx="100" cy="120" rx="60" ry="50" fill="#777"/>
+            <ellipse cx="100" cy="120" rx="50" ry="40" fill="#999"/>
+            <!-- Глаза -->
+            <circle cx="70" cy="100" r="12" fill="#333"/>
+            <circle cx="130" cy="100" r="12" fill="#333"/>
+            <circle cx="72" cy="98" r="5" fill="#fff"/>
+            <circle cx="132" cy="98" r="5" fill="#fff"/>
+            <!-- Мордочка -->
+            <ellipse cx="100" cy="120" rx="30" ry="25" fill="#bbb"/>
+            <!-- Нос -->
+            <ellipse cx="100" cy="105" rx="8" ry="6" fill="#d88"/>
+            <!-- Рот -->
+            <path d="M 85 115 Q 100 125 115 115" stroke="#555" stroke-width="3" fill="none"/>
+            <line x1="100" y1="110" x2="100" y2="125" stroke="#555" stroke-width="2"/>
+            <!-- Усы -->
+            <line x1="60" y1="110" x2="30" y2="100" stroke="#555" stroke-width="2"/>
+            <line x1="60" y1="115" x2="25" y2="115" stroke="#555" stroke-width="2"/>
+            <line x1="140" y1="110" x2="170" y2="100" stroke="#555" stroke-width="2"/>
+            <line x1="140" y1="115" x2="175" y2="115" stroke="#555" stroke-width="2"/>
+            <!-- Хвост -->
+            <path d="M 100 170 Q 140 190 160 160" stroke="#888" stroke-width="8" fill="none" stroke-linecap="round"/>
+            <path d="M 100 170 Q 140 190 160 160" stroke="#aaa" stroke-width="5" fill="none" stroke-linecap="round"/>
+        </svg>
+        <div class="stats">
+            <p>Ваш счет: <span id="userScore">0</span></p>
+            <p>Мировой рекорд: <span id="globalScore">0</span></p>
+        </div>
+        <div class="status" id="status"></div>
+        <div class="offline-indicator" id="offlineIndicator" style="display: none;">⚠️ Работа офлайн</div>
+    </div>
+
+    <script>
+        window.BACKEND_URL = "https://abc123.loca.lt:8000";
+    </script>
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.expand();
+
+        const API_URL = window.BACKEND_URL || "http://localhost:8000";
+        let backendAvailable = true;
+        let localClicks = 0;
+        let isSending = false;
+
+        const scoreEl = document.getElementById('score');
+        const userScoreEl = document.getElementById('userScore');
+        const globalScoreEl = document.getElementById('globalScore');
+        const ratBtn = document.getElementById('ratBtn');
+        const container = document.getElementById('container');
+        const statusEl = document.getElementById('status');
+        const offlineIndicator = document.getElementById('offlineIndicator');
+
+        const floatTexts = ['+1', 'ШЛЕП!', 'WHACK!', '+1', 'БЫСТРО!', '+1'];
+
+        function createSplash(x, y) {
+            const splash = document.createElement('div');
+            splash.className = 'splash';
+            splash.style.left = x + 'px';
+            splash.style.top = y + 'px';
+            container.appendChild(splash);
+
+            for (let i = 0; i < 8; i++) {
+                const drop = document.createElement('div');
+                drop.className = 'splash-drop';
+                const angle = (i / 8) * Math.PI * 2;
+                const dist = 30 + Math.random() * 40;
+                drop.style.setProperty('--tx', Math.cos(angle) * dist + 'px');
+                drop.style.setProperty('--ty', Math.sin(angle) * dist + 'px');
+                drop.style.left = (Math.random() - 0.5) * 10 + 'px';
+                drop.style.top = (Math.random() - 0.5) * 10 + 'px';
+                splash.appendChild(drop);
+            }
+
+            const symbols = ['★', '✦', '⭐', '✧', '✴'];
+            for (let i = 0; i < 4; i++) {
+                const star = document.createElement('div');
+                star.className = 'splash-star';
+                star.textContent = symbols[Math.floor(Math.random() * symbols.length)];
+                const angle = (i / 4) * Math.PI * 2 + Math.PI / 4;
+                const dist = 50 + Math.random() * 50;
+                star.style.setProperty('--tx', Math.cos(angle) * dist + 'px');
+                star.style.setProperty('--ty', Math.sin(angle) * dist + 'px');
+                star.style.left = (Math.random() - 0.5) * 20 + 'px';
+                star.style.top = (Math.random() - 0.5) * 20 + 'px';
+                splash.appendChild(star);
+            }
+
+            setTimeout(() => splash.remove(), 600);
+        }
+
+        function createFloatText(x, y) {
+            const text = document.createElement('div');
+            text.className = 'float-text';
+            text.textContent = floatTexts[Math.floor(Math.random() * floatTexts.length)];
+            text.style.left = x + 'px';
+            text.style.top = y + 'px';
+            text.style.color = '#' + Math.floor(Math.random()*16777215).toString(16);
+            container.appendChild(text);
+            setTimeout(() => text.remove(), 800);
+        }
+
+        ratBtn.addEventListener('click', (e) => {
+            const rect = ratBtn.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+
+            localClicks++;
+            scoreEl.textContent = localClicks;
+
+            ratBtn.classList.add('clicked');
+            setTimeout(() => ratBtn.classList.remove('clicked'), 200);
+
+            createSplash(x, y);
+            createFloatText(x, y);
+
+            if (tg.HapticFeedback) {
+                tg.HapticFeedback.impactOccurred('heavy');
+            }
+
+            sendClick();
+        });
+
+        async function sendClick() {
+            if (isSending) return;
+            isSending = true;
+            ratBtn.style.opacity = '0.7';
+
+            try {
+                const response = await fetch(`${API_URL}/api/click`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ init_data: tg.initData })
+                });
+
+                if (!response.ok) throw new Error('Ошибка сервера');
+
+                const data = await response.json();
+                localClicks = data.new_click_count;
+                scoreEl.textContent = localClicks;
+                userScoreEl.textContent = localClicks;
+                statusEl.textContent = 'Успешно!';
+            } catch (error) {
+                backendAvailable = false;
+                offlineIndicator.style.display = 'block';
+                statusEl.textContent = 'Бэкенд недоступен, работа локально';
+                console.error('Ошибка отправки:', error);
+            } finally {
+                isSending = false;
+                ratBtn.style.opacity = '1';
+            }
+        }
+
+        async function fetchStats() {
+            try {
+                const response = await fetch(`${API_URL}/api/stats`);
+                if (response.ok) {
+                    const data = await response.json();
+                    globalScoreEl.textContent = data.global_clicks;
+                    userScoreEl.textContent = data.user_clicks || 0;
+                    localClicks = data.user_clicks || 0;
+                    scoreEl.textContent = localClicks;
+                    if (!backendAvailable) {
+                        backendAvailable = true;
+                        offlineIndicator.style.display = 'none';
+                    }
+                }
+            } catch (error) {
+                console.error('Ошибка при загрузке статистики:', error);
+            }
+        }
+
+        fetchStats();
+        setInterval(fetchStats, 30000);
+    </script>
+</body>
+</html>
