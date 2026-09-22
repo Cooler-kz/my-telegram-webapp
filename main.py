@@ -1,3 +1,4 @@
+import traceback
 import hashlib
 import hmac
 import os
@@ -143,6 +144,56 @@ async def click(req: ClickRequest, db: AsyncSession = Depends(get_db)):
     return ClickResponse(success=True, user_id=telegram_id, new_click_count=user.click_count)
 
 
+@app.post("/api/click", response_model=ClickResponse)
+async def click(req: ClickRequest, db: AsyncSession = Depends(get_db)):
+    """Построитка и валидация пользователя через Telegram initData"""
+    # Мягкая валидация - разрешаем тестирование без initData
+    if req.init_data and BOT_TOKEN:
+        validated = validate_telegram_init_data(req.init_data, BOT_TOKEN)
+        if not validated:
+            raise HTTPException(status_code=401, detail="Invalid Telegram initData")
+    else:
+        validated = {}
+
+    try:
+        telegram_id = int(validated.get("user", {}).get("id", 0))
+        if telegram_id == 0:
+            raise HTTPException(status_code=400, detail="User ID not found in initData")
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=400, detail="Invalid user ID in initData")
+
+    username = validated.get("user", {}).get("username")
+
+    user = await db.query(User).filter(User.telegram_id == telegram_id).first()
+    if not user:
+        user = User(telegram_id=telegram_id, username=username, click_count=0)
+        db.add(user)
+        await db.commit()
+
+    # Учёт активного буста при начислении очков
+    multiplier = 1.0
+    if user.boost_expires_at and user.boost_expires_at > datetime.utcnow():
+        multiplier = user.boost_multiplier
+    else:
+        user.boost_multiplier = 1.0
+        user.boost_expires_at = None
+
+    user.click_count += int(multiplier)
+    await db.commit()
+    await db.refresh(user)
+
+    global_stat = await db.query(GlobalStats).first()
+    if not global_stat:
+        global_stat = GlobalStats(total_clicks=0)
+        db.add(global_stat)
+        await db.commit()
+
+    global_stat.total_clicks += 1
+    await db.commit()
+
+    return ClickResponse(success=True, user_id=telegram_id, new_click_count=user.click_count)
+
+
 @app.post("/api/create-stars-invoice")
 async def create_stars_invoice(req: StarsInvoiceRequest):
     """Создание инвойса для Telegram Stars"""
@@ -187,6 +238,11 @@ async def check_payment_status(invoice_short_id: str, db: AsyncSession = Depends
     if user:
         return {"status": "paid", "user_id": user.id}
     return {"status": "pending", "user_id": None}
+
+
+@app.get("/api/health")
+async def health():
+    return {"status": "ok", "version": "1.0.1"}
 
 
 @app.post("/api/telegram-webhook")
@@ -280,6 +336,7 @@ async def stats(db: AsyncSession = Depends(get_db)):
 
         return {"user_score": user_clicks, "global_record": global_clicks}
     except Exception:
+        print(traceback.format_exc())
         return {"user_score": 0, "global_record": 0}
 
 
