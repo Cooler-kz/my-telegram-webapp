@@ -245,14 +245,7 @@
         let localClicks = 0;
         let isSending = false;
         
-        // Загрузка сохранённых кликов из localStorage
-        const savedClicks = localStorage.getItem('localClicks');
-        if (savedClicks !== null) {
-            localClicks = parseInt(savedClicks, 10);
-        }
-        scoreEl.textContent = localClicks;
-        userScoreEl.textContent = localClicks;
-
+        // Получаем DOM-элементы ДО использования
         const scoreEl = document.getElementById('score');
         const userScoreEl = document.getElementById('userScore');
         const globalScoreEl = document.getElementById('globalScore');
@@ -260,6 +253,15 @@
         const container = document.getElementById('container');
         const statusEl = document.getElementById('status');
         const offlineIndicator = document.getElementById('offlineIndicator');
+
+        // Загрузка сохранённых кликов из localStorage
+        const savedClicks = localStorage.getItem('localClicks');
+        if (savedClicks !== null) {
+            localClicks = parseInt(savedClicks, 10);
+        }
+        scoreEl.textContent = localClicks;
+        userScoreEl.textContent = localClicks;
+        globalScoreEl.textContent = 0;
 
         const floatTexts = ['+1', 'ШЛЕП!', 'WHACK!', '+1', 'БЫСТРО!', '+1'];
 
@@ -373,8 +375,8 @@
                 const data = await response.json();
                 console.log("Stats received:", data);
                 if (data && typeof data.user_clicks !== 'undefined') {
-                    document.getElementById('user-clicks').innerText = data.user_clicks;
-                    document.getElementById('global-clicks').innerText = data.global_clicks;
+                    userScoreEl.textContent = data.user_clicks;
+                    globalScoreEl.textContent = data.global_clicks || 0;
                 }
             } catch (err) {
                 console.error("Network/Fetch error:", err);
