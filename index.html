@@ -356,21 +356,23 @@
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
                 const data = await response.json();
+                console.log("Stats received:", data);
                 if (data && typeof data.user_clicks !== 'undefined') {
                     document.getElementById('user-clicks').innerText = data.user_clicks;
                     document.getElementById('global-clicks').innerText = data.global_clicks;
-                    
-                    const offlineInd = document.getElementById('offlineIndicator');
-                    if (offlineInd) offlineInd.style.display = 'none';
-                    
-                    const backendStatus = document.querySelector('.backend-status');
-                    if (backendStatus) backendStatus.style.display = 'none';
                 }
             } catch (error) {
                 console.error('Ошибка при загрузке статистики:', error);
+            } finally {
+                // Скрываем обе надписи оффлайна
+                const offlineMsg = document.getElementById('offlineIndicator');
+                if (offlineMsg) offlineMsg.style.display = 'none';
+
+                document.querySelectorAll('.backend-status, #backend-status').forEach(el => {
+                    el.style.display = 'none';
+                });
             }
         }
-
         async function buyBoost(boosterType) {
             const userId = tg.initDataUnsafe?.user?.id;
 
