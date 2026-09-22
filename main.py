@@ -9,6 +9,7 @@ from typing import Optional
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
+from sqlalchemy.future import select
 from fastapi.middleware.cors import CORSMiddleware
 from httpx import AsyncClient
 from sqlalchemy import func
@@ -40,7 +41,7 @@ class StarsInvoiceRequest(BaseModel):
     booster_type: str
 
 class ClickRequest(BaseModel):
-    init_data: str
+    init_data: Optional[str] = None
 
 
 class ClickResponse(BaseModel):
@@ -278,10 +279,12 @@ async def apply_boost_endpoint(user_id: int, booster_type: str, db: AsyncSession
 async def stats(db: AsyncSession = Depends(get_db)):
     """Получение статистики: личные клики и глобальный счётчик"""
     try:
-        user = await db.query(User).first()
+        result = await db.execute(select(User))
+        user = result.scalars().first()
         user_clicks = user.click_count if user else 0
 
-        global_stat = await db.query(GlobalStats).first()
+        result = await db.execute(select(GlobalStats))
+        global_stat = result.scalars().first()
         global_clicks = global_stat.total_clicks if global_stat else 0
 
         return {"user_clicks": user_clicks, "global_clicks": global_clicks}
