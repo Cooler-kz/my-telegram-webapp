@@ -19,12 +19,11 @@ from database import get_db, init_db, User, GlobalStats
 app = FastAPI(title="Telegram Clicker API")
 
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
-ALLOWED_ORIGINS = ["https://github.com", "https://<username>.github.io", "https://abc123.ngrok.io", "https://my-telegram-webapp-unku.onrender.com", "*"]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
