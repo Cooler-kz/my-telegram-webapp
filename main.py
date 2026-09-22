@@ -41,7 +41,10 @@ class StarsInvoiceRequest(BaseModel):
     booster_type: str
 
 class ClickRequest(BaseModel):
+    clicks: Optional[int] = 1
+    count: Optional[int] = 1
     init_data: Optional[str] = None
+    initData: Optional[str] = None
 
 
 class ClickResponse(BaseModel):
@@ -96,11 +99,17 @@ async def startup():
 
 
 @app.post("/api/click", response_model=ClickResponse)
-async def click(req: ClickRequest, db: AsyncSession = Depends(get_db)):
+async def click(payload: Optional[ClickRequest] = None, db: AsyncSession = Depends(get_db)):
     """Построитка и валидация пользователя через Telegram initData"""
+    # Безопасное извлечение количества кликов
+    added_clicks = 1
+    if payload:
+        added_clicks = payload.clicks or payload.count or 1
+    
     # Мягкая валидация - разрешаем тестирование без initData
-    if req.init_data and BOT_TOKEN:
-        validated = validate_telegram_init_data(req.init_data, BOT_TOKEN)
+    init_data = payload.init_data or payload.initData if payload else None
+    if init_data and BOT_TOKEN:
+        validated = validate_telegram_init_data(init_data, BOT_TOKEN)
         if not validated:
             raise HTTPException(status_code=401, detail="Invalid Telegram initData")
     else:
