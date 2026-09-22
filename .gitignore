@@ -1,9 +1,14 @@
 # Database
 *.db
+clicker.db
 
 # Environment & Configs
-*.env
+.env
+.env.local
 *.json
+
+# Keep example template
+!.env.example
 
 # Python
 __pycache__/

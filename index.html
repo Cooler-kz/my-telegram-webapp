@@ -244,6 +244,14 @@
         let backendAvailable = true;
         let localClicks = 0;
         let isSending = false;
+        
+        // Загрузка сохранённых кликов из localStorage
+        const savedClicks = localStorage.getItem('localClicks');
+        if (savedClicks !== null) {
+            localClicks = parseInt(savedClicks, 10);
+        }
+        scoreEl.textContent = localClicks;
+        userScoreEl.textContent = localClicks;
 
         const scoreEl = document.getElementById('score');
         const userScoreEl = document.getElementById('userScore');
@@ -341,11 +349,14 @@
                 localClicks = data.new_click_count;
                 scoreEl.textContent = localClicks;
                 userScoreEl.textContent = localClicks;
+                localStorage.setItem('localClicks', localClicks);
                 statusEl.textContent = 'Успешно!';
             } catch (error) {
                 backendAvailable = false;
                 offlineIndicator.style.display = 'block';
                 statusEl.textContent = 'Бэкенд недоступен, работа локально';
+                // Сохраняем локальные клики
+                localStorage.setItem('localClicks', localClicks);
                 console.error('Ошибка отправки:', error);
             } finally {
                 isSending = false;
@@ -367,11 +378,8 @@
                 }
             } catch (err) {
                 console.error("Network/Fetch error:", err);
-                // Скрываем офлайн-индикаторы в любом случае для теста UI
-                const offlineInd = document.getElementById('offlineIndicator');
-                if (offlineInd) offlineInd.style.display = 'none';
-                const backendStatus = document.querySelector('.backend-status');
-                if (backendStatus) backendStatus.style.display = 'none';
+                backendAvailable = false;
+                offlineIndicator.style.display = 'block';
             }
         }
         async function buyBoost(boosterType) {
