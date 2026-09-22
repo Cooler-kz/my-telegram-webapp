@@ -357,8 +357,8 @@
                 }
                 const data = await response.json();
                 globalScoreEl.textContent = data.global_clicks;
-                userScoreEl.textContent = data.user_clicks || 0;
-                localClicks = data.user_clicks || 0;
+                userScoreEl.textContent = data.user_clicks ?? 0;
+                localClicks = data.user_clicks ?? 0;
                 scoreEl.textContent = localClicks;
                 if (!backendAvailable) {
                     backendAvailable = true;
