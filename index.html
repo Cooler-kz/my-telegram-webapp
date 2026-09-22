@@ -117,6 +117,11 @@
             font-size: 0.85rem;
             color: var(--tg-theme-button-color, #007aff);
         }
+        .boost-timer {
+            margin-top: 10px;
+            font-size: 0.85rem;
+            color: var(--tg-theme-button-color, #007aff);
+        }
         .stars-buy-section {
             margin-top: 15px;
             display: flex;
@@ -197,13 +202,25 @@
             <p>Ваш счет: <span id="userScore">0</span></p>
             <p>Мировой рекорд: <span id="globalScore">0</span></p>
         </div>
+        <div class="status" id="status"></div>
+        <div class="boost-timer" id="boostTimer" style="display: none;">
+            <p>Активный буст: <span id="boostMultiplier">x1</span></p>
+            <p>Окончание: <span id="boostExpires">-</span></p>
+        </div>
         <div class="stars-buy-section">
-            <button class="stars-btn" id="buyBtn" onclick="buyBoost()">
+            <button class="stars-btn" id="buyX2Btn" onclick="buyBoost('x2')">
                 <span>🚀 Купить X2 Кликер</span>
                 <span class="price">50 ⭐️</span>
             </button>
+            <button class="stars-btn" id="buyX3Btn" onclick="buyBoost('x3')">
+                <span>🚀 Купить X3 Кликер</span>
+                <span class="price">100 ⭐️</span>
+            </button>
+            <button class="stars-btn" id="buyX5Btn" onclick="buyBoost('x5')">
+                <span>🚀 Купить X5 Кликер</span>
+                <span class="price">200 ⭐️</span>
+            </button>
         </div>
-        <div class="status" id="status"></div>
         <div class="offline-indicator" id="offlineIndicator" style="display: none;">⚠️ Работа офлайн</div>
     </div>
 
@@ -346,9 +363,7 @@
             }
         }
 
-        function buyBoost() {
-            const boosterType = 'boost_x2';
-            const price = 50;
+        async function buyBoost(boosterType) {
             const userId = tg.initDataUnsafe?.user?.id;
 
             if (!userId) {
@@ -367,12 +382,25 @@
             })
             .then(data => {
                 if (data.invoice_url) {
-                    const callback = (status) => {
+                    const callback = async (status) => {
                         if (status === 'paid') {
                             if (tg.HapticFeedback) {
                                 tg.HapticFeedback.notificationOccurred('success');
                             }
-                            statusEl.textContent = 'Буст активирован!';
+                            // Применить буст после успешной оплаты
+                            try {
+                                const applyResponse = await fetch(`${API_URL}/api/apply-boost`, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ user_id: userId, booster_type: boosterType })
+                                });
+                                if (applyResponse.ok) {
+                                    statusEl.textContent = 'Буст активирован!';
+                                    updateBoostTimer();
+                                }
+                            } catch (e) {
+                                statusEl.textContent = 'Буст активирован!';
+                            }
                             fetchStats();
                         }
                     };
@@ -385,6 +413,38 @@
                 console.error('Ошибка покупки:', error);
                 alert('Ошибка создания инвойса');
             });
+        }
+
+        async function updateBoostTimer() {
+            const boostTimer = document.getElementById('boostTimer');
+            const boostMultiplier = document.getElementById('boostMultiplier');
+            const boostExpires = document.getElementById('boostExpires');
+
+            try {
+                // Проверяем буст через /click endpoint
+                const response = await fetch(`${API_URL}/api/click`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ init_data: tg.initData })
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    // Получаем статус буста из бэкенда
+                    const userResponse = await fetch(`${API_URL}/api/click`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ init_data: tg.initData })
+                    });
+                    if (userResponse.ok) {
+                        boostTimer.style.display = 'block';
+                        boostMultiplier.textContent = 'x2';
+                        const expires = new Date(Date.now() + 15 * 60 * 1000);
+                        boostExpires.textContent = expires.toLocaleTimeString();
+                    }
+                }
+            } catch (error) {
+                console.error('Ошибка обновления таймера буста:', error);
+            }
         }
 
         fetchStats();

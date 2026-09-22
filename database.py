@@ -1,6 +1,7 @@
-from sqlalchemy import Column, Integer, String, BigInteger, create_engine
+from sqlalchemy import Column, Integer, String, BigInteger, Float, DateTime, create_engine
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.orm import declarative_base, sessionmaker
+from datetime import datetime
 
 DATABASE_URL = "sqlite+aiosqlite:///./clicker.db"
 
@@ -18,6 +19,8 @@ class User(Base):
     username = Column(String(255), nullable=True)
     click_count = Column(Integer, default=0)
     purchases = Column(String, default="")
+    boost_multiplier = Column(Float, default=1.0)
+    boost_expires_at = Column(DateTime, nullable=True)
 
 
 class GlobalStats(Base):

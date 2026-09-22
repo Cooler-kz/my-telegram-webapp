@@ -2,6 +2,7 @@ import hashlib
 import hmac
 import os
 import secrets
+from datetime import datetime, timedelta
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Depends
@@ -11,7 +12,7 @@ from httpx import AsyncClient
 from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from database import get_db, init_db, User, GlobalStats, apply_boost
+from database import get_db, init_db, User, GlobalStats
 
 
 app = FastAPI(title="Telegram Clicker API")
@@ -109,7 +110,15 @@ async def click(req: ClickRequest, db: AsyncSession = Depends(get_db)):
         db.add(user)
         await db.commit()
 
-    user.click_count += 1
+    # Учёт активного буста при начислении очков
+    multiplier = 1.0
+    if user.boost_expires_at and user.boost_expires_at > datetime.utcnow():
+        multiplier = user.boost_multiplier
+    else:
+        user.boost_multiplier = 1.0
+        user.boost_expires_at = None
+
+    user.click_count += int(multiplier)
     await db.commit()
     await db.refresh(user)
 
@@ -162,9 +171,13 @@ async def create_stars_invoice(req: StarsInvoiceRequest):
 
 
 @app.get("/api/check-payment-status/{invoice_short_id}")
-async def check_payment_status(invoice_short_id: str):
+async def check_payment_status(invoice_short_id: str, db: AsyncSession = Depends(get_db)):
     """Проверка статуса оплаты и зачисление буста"""
-    raise HTTPException(status_code=501, detail="Payment status check not implemented yet")
+    # Ищем покупку по invoice_id в поле purchases (упрощённая реализация)
+    user = await db.query(User).filter(User.purchases.like(f"%{invoice_short_id}%")).first()
+    if user:
+        return {"status": "paid", "user_id": user.id}
+    return {"status": "pending", "user_id": None}
 
 
 @app.post("/api/telegram-webhook")
@@ -205,11 +218,28 @@ async def telegram_webhook(event: dict, db: AsyncSession = Depends(get_db)):
 
 
 @app.post("/api/apply-boost")
-async def apply_boost_endpoint(user_id: int, booster_type: str):
+async def apply_boost_endpoint(user_id: int, booster_type: str, db: AsyncSession = Depends(get_db)):
     """Применение буста для пользователя"""
-    # TODO: Реализовать применение буста через Telegram Bot API
-    # Пример: GET https://api.telegram.org/bot<BOT_TOKEN>/getInvoiceLink
-    raise HTTPException(status_code=501, detail="Boost application not implemented yet")
+    # Mapping booster_type к множителю и длительности
+    boost_config = {
+        "x2": {"multiplier": 2.0, "duration_minutes": 15},
+        "x3": {"multiplier": 3.0, "duration_minutes": 20},
+        "x5": {"multiplier": 5.0, "duration_minutes": 30},
+    }
+    config = boost_config.get(booster_type)
+    if not config:
+        raise HTTPException(status_code=400, detail="Invalid booster type")
+
+    user = await db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Устанавливаем активный буст
+    user.boost_multiplier = config["multiplier"]
+    user.boost_expires_at = datetime.utcnow() + timedelta(minutes=config["duration_minutes"])
+    await db.commit()
+
+    return {"success": True, "multiplier": config["multiplier"], "expires_at": user.boost_expires_at.isoformat()}
 
 
 @app.get("/api/stats", response_model=StatsResponse)
