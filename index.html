@@ -167,7 +167,7 @@
 </head>
 <body>
     <div class="clicker-container" id="container">
-        <h1>🎯 Telegram Clicker</h1>
+        <h1>1clk</h1>
         <div class="score-display" id="score">0</div>
         <svg class="rat-svg" id="ratBtn" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
             <!-- Уши -->
@@ -352,16 +352,17 @@
         async function fetchStats() {
             try {
                 const response = await fetch(`${API_URL}/api/stats`);
-                if (response.ok) {
-                    const data = await response.json();
-                    globalScoreEl.textContent = data.global_clicks;
-                    userScoreEl.textContent = data.user_clicks || 0;
-                    localClicks = data.user_clicks || 0;
-                    scoreEl.textContent = localClicks;
-                    if (!backendAvailable) {
-                        backendAvailable = true;
-                        offlineIndicator.style.display = 'none';
-                    }
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                globalScoreEl.textContent = data.global_clicks;
+                userScoreEl.textContent = data.user_clicks || 0;
+                localClicks = data.user_clicks || 0;
+                scoreEl.textContent = localClicks;
+                if (!backendAvailable) {
+                    backendAvailable = true;
+                    offlineIndicator.style.display = 'none';
                 }
             } catch (error) {
                 console.error('Ошибка при загрузке статистики:', error);
@@ -449,6 +450,7 @@
                         localClicks = data.balance;
                         scoreEl.textContent = data.balance;
                     } else {
+                        console.error('Ошибка при начислении вознаграждения:', response.status);
                         alert('Ошибка при начислении вознаграждения');
                     }
                 }
