@@ -346,7 +346,7 @@
                 if (!response.ok) throw new Error('Ошибка сервера');
 
                 const data = await response.json();
-                localClicks = data.new_click_count;
+                localClicks = data.user_clicks || localClicks;
                 scoreEl.textContent = localClicks;
                 userScoreEl.textContent = localClicks;
                 localStorage.setItem('localClicks', localClicks);

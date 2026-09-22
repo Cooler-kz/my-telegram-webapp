@@ -49,9 +49,9 @@ class ClickRequest(BaseModel):
 
 
 class ClickResponse(BaseModel):
-    success: bool
-    user_id: int
-    new_click_count: int
+    status: str
+    user_clicks: int
+    global_clicks: int
 
 
 class StatsResponse(BaseModel):
@@ -157,7 +157,7 @@ async def click(request: Request, db: AsyncSession = Depends(get_db)):
     global_stat.total_clicks += 1
     await db.commit()
 
-    return ClickResponse(success=True, user_id=telegram_id, new_click_count=user.click_count)
+    return ClickResponse(status="ok", user_clicks=user.click_count, global_clicks=global_stat.total_clicks)
 
 
 @app.post("/api/create-stars-invoice")
