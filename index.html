@@ -117,6 +117,37 @@
             font-size: 0.85rem;
             color: var(--tg-theme-button-color, #007aff);
         }
+        .stars-buy-section {
+            margin-top: 15px;
+            display: flex;
+            justify-content: center;
+        }
+        .stars-btn {
+            background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
+            border: none;
+            border-radius: 12px;
+            padding: 12px 24px;
+            color: #000;
+            font-weight: bold;
+            font-size: 1rem;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            box-shadow: 0 4px 15px rgba(255, 215, 0, 0.4);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .stars-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(255, 215, 0, 0.6);
+        }
+        .stars-btn:active {
+            transform: translateY(0);
+        }
+        .stars-btn .price {
+            font-size: 0.9rem;
+            margin-top: 2px;
+        }
         .offline-indicator {
             color: #ff6b6b;
             font-size: 0.8rem;
@@ -165,6 +196,12 @@
         <div class="stats">
             <p>Ваш счет: <span id="userScore">0</span></p>
             <p>Мировой рекорд: <span id="globalScore">0</span></p>
+        </div>
+        <div class="stars-buy-section">
+            <button class="stars-btn" id="buyBtn" onclick="buyBoost()">
+                <span>🚀 Купить X2 Кликер</span>
+                <span class="price">50 ⭐️</span>
+            </button>
         </div>
         <div class="status" id="status"></div>
         <div class="offline-indicator" id="offlineIndicator" style="display: none;">⚠️ Работа офлайн</div>
@@ -307,6 +344,47 @@
             } catch (error) {
                 console.error('Ошибка при загрузке статистики:', error);
             }
+        }
+
+        function buyBoost() {
+            const boosterType = 'boost_x2';
+            const price = 50;
+            const userId = tg.initDataUnsafe?.user?.id;
+
+            if (!userId) {
+                alert('Ошибка: не удалось определить пользователя');
+                return;
+            }
+
+            fetch(`${API_URL}/api/create-stars-invoice`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_id: userId, booster_type: boosterType })
+            })
+            .then(response => {
+                if (!response.ok) throw new Error('Ошибка создания инвойса');
+                return response.json();
+            })
+            .then(data => {
+                if (data.invoice_url) {
+                    const callback = (status) => {
+                        if (status === 'paid') {
+                            if (tg.HapticFeedback) {
+                                tg.HapticFeedback.notificationOccurred('success');
+                            }
+                            statusEl.textContent = 'Буст активирован!';
+                            fetchStats();
+                        }
+                    };
+                    tg.openInvoice(data.invoice_url, callback);
+                } else {
+                    alert('Ошибка: инвойс не создан');
+                }
+            })
+            .catch(error => {
+                console.error('Ошибка покупки:', error);
+                alert('Ошибка создания инвойса');
+            });
         }
 
         fetchStats();

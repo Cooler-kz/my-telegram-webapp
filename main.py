@@ -4,12 +4,12 @@ import secrets
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Depends
-from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from database import get_db, init_db, User, GlobalStats
+from database import get_db, init_db, User, GlobalStats, apply_boost
 
 
 app = FastAPI(title="Telegram Clicker API")
@@ -25,6 +25,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+class StarsInvoiceRequest(BaseModel):
+    user_id: int
+    booster_type: str
 
 class ClickRequest(BaseModel):
     init_data: str
@@ -117,6 +121,31 @@ async def click(req: ClickRequest, db: AsyncSession = Depends(get_db)):
     await db.commit()
 
     return ClickResponse(success=True, user_id=telegram_id, new_click_count=user.click_count)
+
+
+@app.post("/api/create-stars-invoice")
+async def create_stars_invoice(req: StarsInvoiceRequest):
+    """Создание инвойса для Telegram Stars"""
+    # TODO: Реализовать создание инвойса через Telegram Bot API
+    # Пример: POST https://api.telegram.org/bot<BOT_TOKEN>/createInvoiceLink
+    # with: currency="XTR", provider_data=None (для Stars)
+    raise HTTPException(status_code=501, detail="Telegram Stars invoice creation not implemented yet")
+
+
+@app.get("/api/check-payment-status/{invoice_short_id}")
+async def check_payment_status(invoice_short_id: str):
+    """Проверка статуса оплаты и зачисление буста"""
+    # TODO: Реализовать проверку статуса через Telegram Bot API
+    # Пример: GET https://api.telegram.org/bot<BOT_TOKEN>/getInvoiceLink
+    raise HTTPException(status_code=501, detail="Payment status check not implemented yet")
+
+
+@app.post("/api/apply-boost")
+async def apply_boost_endpoint(user_id: int, booster_type: str):
+    """Применение буста для пользователя"""
+    # TODO: Реализовать применение буста через Telegram Bot API
+    # Пример: GET https://api.telegram.org/bot<BOT_TOKEN>/getInvoiceLink
+    raise HTTPException(status_code=501, detail="Boost application not implemented yet")
 
 
 @app.get("/api/stats", response_model=StatsResponse)
