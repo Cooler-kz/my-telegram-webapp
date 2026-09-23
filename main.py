@@ -1,8 +1,10 @@
+import json
 import traceback
 import hashlib
 import hmac
 import os
 import secrets
+from urllib.parse import unquote
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -12,7 +14,7 @@ from pydantic import BaseModel
 from sqlalchemy.future import select
 from fastapi.middleware.cors import CORSMiddleware
 from httpx import AsyncClient
-from sqlalchemy import func
+from sqlalchemy import func, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db, init_db, User, GlobalStats
@@ -22,6 +24,7 @@ app = FastAPI(title="Telegram Clicker API")
 
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 VALIDATE_TELEGRAM_INIT_DATA = os.getenv("VALIDATE_TELEGRAM_INIT_DATA", "true").lower() == "true"
+TEST_USER_ID = int(os.getenv("TEST_USER_ID", "123456789"))
 
 app.add_middleware(
     CORSMiddleware,
@@ -73,22 +76,30 @@ def validate_telegram_init_data(init_data: str, bot_token: str) -> Optional[dict
 
         received_hash = params.pop("hash")
         data_check = "\n".join(f"{k}={v}" for k, v in sorted(params.items()))
-        
+
         secret_key = hmac.new(
             b"WebAppData",
             bot_token.encode("utf-8"),
             hashlib.sha256
         ).digest()
-        
+
         calculated_hash = hmac.new(
             secret_key,
             data_check.encode("utf-8"),
             hashlib.sha256
         ).hexdigest()
-        
+
         if not hmac.compare_digest(calculated_hash, received_hash):
             return None
-        
+
+        # Telegram WebApp кодирует поле "user" как JSON-строку, поэтому декодируем его
+        user_json = params.get("user")
+        if user_json:
+            try:
+                params["user"] = json.loads(unquote(user_json))
+            except Exception:
+                params["user"] = {}
+
         return params
     except Exception:
         return None
@@ -111,31 +122,39 @@ async def click(request: Request, db: AsyncSession = Depends(get_db)):
             init_data = body.get("init_data") or body.get("initData")
     except Exception:
         pass  # Если пришел пустой body или не-JSON, просто засчитываем +1 клик
-    if init_data and BOT_TOKEN and VALIDATE_TELEGRAM_INIT_DATA:
+    
+    # Обработка initData: если пустой, отсутствует или состоит только из пробелов, используем гостевой режим
+    if not init_data or not str(init_data).strip():
+        # Пустой initData - гостевой/тестовый режим
+        validated = {"user": {"id": TEST_USER_ID, "username": "guest"}}
+    elif BOT_TOKEN and VALIDATE_TELEGRAM_INIT_DATA:
+        # Валидация включена и есть токен - проверяем подпись
         validated = validate_telegram_init_data(init_data, BOT_TOKEN)
         if not validated:
             raise HTTPException(status_code=401, detail="Invalid Telegram initData")
-    elif init_data and BOT_TOKEN and not VALIDATE_TELEGRAM_INIT_DATA:
-        # Валидация отключена для тестирования — принимаем произвольный init_data
-        validated = {"user": {"id": 123456789}}  # тестовый user_id
+    elif BOT_TOKEN and not VALIDATE_TELEGRAM_INIT_DATA:
+        # Валидация отключена для тестирования - принимаем любые данные
+        validated = {"user": {"id": TEST_USER_ID, "username": "test"}}
     else:
-        validated = {}
-
+        # Нет токена - считаем, что это тестовый запуск
+        validated = {"user": {"id": TEST_USER_ID, "username": "dev"}}
+    
     try:
         telegram_id = int(validated.get("user", {}).get("id", 0))
         if telegram_id == 0:
             raise HTTPException(status_code=400, detail="User ID not found in initData")
     except (ValueError, TypeError):
         raise HTTPException(status_code=400, detail="Invalid user ID in initData")
-
+    
     username = validated.get("user", {}).get("username")
-
-    user = await db.query(User).filter(User.telegram_id == telegram_id).first()
+    
+    result = await db.execute(select(User).filter(User.telegram_id == telegram_id))
+    user = result.scalars().first()
     if not user:
         user = User(telegram_id=telegram_id, username=username, click_count=0)
         db.add(user)
         await db.commit()
-
+    
     # Учёт активного буста при начислении очков
     multiplier = 1.0
     if user.boost_expires_at and user.boost_expires_at > datetime.utcnow():
@@ -143,20 +162,21 @@ async def click(request: Request, db: AsyncSession = Depends(get_db)):
     else:
         user.boost_multiplier = 1.0
         user.boost_expires_at = None
-
+    
     user.click_count += int(multiplier)
     await db.commit()
     await db.refresh(user)
-
-    global_stat = await db.query(GlobalStats).first()
+    
+    result = await db.execute(select(GlobalStats))
+    global_stat = result.scalars().first()
     if not global_stat:
         global_stat = GlobalStats(total_clicks=0)
         db.add(global_stat)
         await db.commit()
-
+    
     global_stat.total_clicks += 1
     await db.commit()
-
+    
     return ClickResponse(status="ok", user_clicks=user.click_count, global_clicks=global_stat.total_clicks)
 
 
@@ -200,7 +220,8 @@ async def create_stars_invoice(req: StarsInvoiceRequest):
 async def check_payment_status(invoice_short_id: str, db: AsyncSession = Depends(get_db)):
     """Проверка статуса оплаты и зачисление буста"""
     # Ищем покупку по invoice_id в поле purchases (упрощённая реализация)
-    user = await db.query(User).filter(User.purchases.like(f"%{invoice_short_id}%")).first()
+    result = await db.execute(select(User).filter(User.purchases.like(f"%{invoice_short_id}%")))
+    user = result.scalars().first()
     if user:
         return {"status": "paid", "user_id": user.id}
     return {"status": "pending", "user_id": None}
@@ -249,16 +270,15 @@ async def telegram_webhook(event: dict, db: AsyncSession = Depends(get_db)):
         telegram_id = successful.get("from", {}).get("id")
         invoice_id = successful.get("invoice_id")
 
-        user = await db.query(User).filter(User.telegram_id == telegram_id).first()
+        result = await db.execute(select(User).filter(User.telegram_id == telegram_id))
+        user = result.scalars().first()
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
-
+        
         parts = payload.split("_")
         if len(parts) >= 2:
             booster_type = parts[1]
-            await db.query(User).filter(User.telegram_id == telegram_id).update({
-                User.purchases: User.purchases.cast(String) + f"{booster_type},"
-            })
+            await db.execute(update(User).where(User.telegram_id == telegram_id).values({User.purchases: User.purchases.cast(String) + f"{booster_type},"}))
             await db.commit()
         return {"ok": True, "user_id": telegram_id, "booster_type": booster_type}
 
@@ -278,7 +298,8 @@ async def apply_boost_endpoint(user_id: int, booster_type: str, db: AsyncSession
     if not config:
         raise HTTPException(status_code=400, detail="Invalid booster type")
 
-    user = await db.query(User).filter(User.id == user_id).first()
+    result = await db.execute(select(User).filter(User.id == user_id))
+    user = result.scalars().first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -311,7 +332,8 @@ async def stats(db: AsyncSession = Depends(get_db)):
 @app.get("/api/boost-status")
 async def get_boost_status(user_id: int, db: AsyncSession = Depends(get_db)):
     """Получение статуса активного буста пользователя"""
-    user = await db.query(User).filter(User.telegram_id == user_id).first()
+    result = await db.execute(select(User).filter(User.telegram_id == user_id))
+    user = result.scalars().first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
@@ -330,7 +352,8 @@ async def get_boost_status(user_id: int, db: AsyncSession = Depends(get_db)):
 @app.post("/api/claim-ad-reward")
 async def claim_ad_reward(user_id: int, db: AsyncSession = Depends(get_db)):
     """Начисление вознаграждения за просмотр рекламы (+100 очков)"""
-    user = await db.query(User).filter(User.id == user_id).first()
+    result = await db.execute(select(User).filter(User.id == user_id))
+    user = result.scalars().first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
